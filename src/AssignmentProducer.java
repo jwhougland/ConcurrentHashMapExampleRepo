@@ -2,6 +2,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Contains the data and behavior of an assignment producer
@@ -15,12 +17,41 @@ public class AssignmentProducer implements Runnable {
     private ConcurrentHashMap<Integer, Assignment> assignmentMap;
 
     /**
+     * Maintains state about whether production of assignments is complete
+     */
+    private AtomicBoolean isProductionDone;
+
+    /**
+     * Final number of assignments produced
+     */
+    private AtomicInteger numberOfAssignments;
+
+    /**
      * Creates a fully initialized assignment producer using the given data
      *
-     * @param assignmentMap Concurrent hash map for assignments
+     * @param assignmentMap        Concurrent hash map for assignments
+     * @param isProductionDone     Maintains state about whether production of assignments is complete
+     * @param numberOfAssignments  Final number of assignments produced
      */
-    public AssignmentProducer(ConcurrentHashMap<Integer, Assignment> assignmentMap) {
+    public AssignmentProducer(ConcurrentHashMap<Integer, Assignment> assignmentMap,
+                              AtomicBoolean isProductionDone,
+                              AtomicInteger numberOfAssignments) {
+
+        if (assignmentMap == null) {
+            throw new IllegalArgumentException("Cannot produce assignments into a null data structure");
+        }
+
+        if (isProductionDone == null) {
+            throw new IllegalArgumentException("Unable to notify if assignment production is done");
+        }
+
+        if (numberOfAssignments == null) {
+            throw new IllegalArgumentException("Unable to report number of assignments produced");
+        }
+
         this.assignmentMap = assignmentMap;
+        this.isProductionDone = isProductionDone;
+        this.numberOfAssignments = numberOfAssignments;
     }
 
     /**
@@ -29,10 +60,12 @@ public class AssignmentProducer implements Runnable {
      */
     @Override
     public void run() {
+
+        List<Assignment> assignments = null;
         try {
 
             // Create a list of assignments (which are unordered relative to due date/priority level)
-            List<Assignment> assignments = createAssignments();
+            assignments = createAssignments();
 
             // Iterate over the unordered assignments and
             // insert them into the concurrent hash map
@@ -41,12 +74,17 @@ public class AssignmentProducer implements Runnable {
 
                 System.out.println("Producing assignment #" + transactionId + ": " + assignment);
                 assignmentMap.put(transactionId, assignment);
+                transactionId++;
                 Thread.sleep(500); // simulating some work
             }
 
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+
+        // Notify that production is complete and the final count of assignments produced
+        isProductionDone.set(true);
+        numberOfAssignments.set(assignments.size());
     }
 
     /**
